@@ -6,11 +6,15 @@
     # Author: Jorge
     ################################################################################
 
+  
+    # --- Load the Project Config ---
+    . ./Project_PhotoOrganizer.conf
+    
     # --- Default Configuration ---
     DEBUG_MODE=false
     UNZIP_ONLY_MODE=false
     EXEC_ID=$(date '+%Y%m%d%H%M%S')
-    BASE_DIR="/home/jorge/DATOS/photos"
+    BASE_DIR="$BASE_DEV_FOLDER/photos"
     LOG_DIR="$BASE_DIR/log_$EXEC_ID"
     LOG_FILE="$LOG_DIR/organize_album_$EXEC_ID.log"
     TMP_DIR="tmp_$EXEC_ID"

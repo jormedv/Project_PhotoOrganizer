@@ -1,0 +1,12 @@
+#Basic
+sudo apt install zip unzip wget curl -y
+sudo apt install libimage-exiftool-perl -y
+
+#Google Workspace and Google Cloud CLIs
+npm install -g @googleworkspace/cli				
+sudo npm install -g @googleworkspace/cli				
+sudo apt-get install apt-transport-https ca-certificates gnupg curl -y
+sudo apt-get install google-cloud-cli
+
+#rclone
+sudo -v ; curl https://rclone.org/install.sh | sudo bash

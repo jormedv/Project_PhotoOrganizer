@@ -4,12 +4,14 @@ from playwright.sync_api import sync_playwright
 
 ALBUM_ID = "AF1QipPKstyDa-f6KnXLwuzukksNQjsBGhrBQFRLBqZdKqw2AoTJ773DqnOUf06QBT9m7A"
 ALBUM_URL = f"https://photos.google.com/share/{ALBUM_ID}?obfsgid=106615097338837901788&email=jorge.medina.vallejo.ai@gmail.com&key=NWRpT3luZ0IxRlRpWDMwYzdmSXlUWE40eU9OX0lB"
-DOWNLOAD_DIR="/home/jorge/DATOS/photos"
+#DOWNLOAD_DIR="/home/jorge/DATOS/photos"
+DOWNLOAD_DIR="/home/jorgemedinavallejo/DEV/photos"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 with sync_playwright() as p:
     browser = p.chromium.launch_persistent_context(
-        user_data_dir="/home/jorge/.config/chrome-playwright",
+        #user_data_dir="/home/jorge/.config/chrome-playwright",
+        user_data_dir="/home/jorgemedinavallejo/.config/chrome-playwright",
         headless=False,
         channel="chrome",
         args=[

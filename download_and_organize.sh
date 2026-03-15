@@ -6,12 +6,16 @@
 # Author: Jorge
 ################################################################################
 
+  # --- Load the Project Config ---
+  . ./Project_PhotoOrganizer.conf
+    
+
 # --- Default Configuration ---
 DEBUG_MODE=false
 SKIP_DOWNLOAD=false
 EXEC_ID=$(date '+%Y%m%d%H%M%S')
-BASE_DIR="/home/jorge/DATOS/photos"
-CODE_DIR="/home/jorge/DATOS/Project_PhotoOrganizer"
+BASE_DIR="$BASE_DEV_FOLDER/photos"
+CODE_DIR="$BASE_DEV_FOLDER/Project_PhotoOrganizer"
 LOG_FILE="download_and_organize_$EXEC_ID.log"
 
 # --- Utility Functions ---
@@ -91,7 +95,7 @@ else
         rm -f "$BASE_DIR/album.zip"
     fi
 
-    source env/bin/activate 
+    source .venv/bin/activate
     python3 download_album_all_1.py 
     if [ $? -ne 0 ]; then
         log_info "Download script failed. Aborting."
