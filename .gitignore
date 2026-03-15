@@ -1,0 +1,30 @@
+# Virtual Environments
+venv/
+env/
+ENV/
+.env/
+.venv/
+
+# Python bytecode
+**/__pycache__/
+*.py[cod]
+
+# Distribution / packaging
+bin/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+
+# Operating System files
+.DS_Store
+Thumbs.db

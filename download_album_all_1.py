@@ -4,7 +4,7 @@ from playwright.sync_api import sync_playwright
 
 ALBUM_ID = "AF1QipPKstyDa-f6KnXLwuzukksNQjsBGhrBQFRLBqZdKqw2AoTJ773DqnOUf06QBT9m7A"
 ALBUM_URL = f"https://photos.google.com/share/{ALBUM_ID}?obfsgid=106615097338837901788&email=jorge.medina.vallejo.ai@gmail.com&key=NWRpT3luZ0IxRlRpWDMwYzdmSXlUWE40eU9OX0lB"
-DOWNLOAD_DIR = "photos"
+DOWNLOAD_DIR="/home/jorge/DATOS/photos"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 with sync_playwright() as p:
