@@ -7,7 +7,7 @@
 ################################################################################
 
 # --- Load the Project Config ---
-. ./Project_PhotoOrganizer.conf
+set -a; . ./.env; set +a
     
 # --- Default Configuration ---
 DEBUG_MODE=false
