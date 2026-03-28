@@ -87,11 +87,6 @@ run_pre_process() {
         exit 0
     fi
 
-    log_info "--- Pre-processing Summary ---"
-    log_info "Mode: $( [ "$UNZIP_ONLY_MODE" = true ] && echo "UNZIP ONLY" || echo "FULL" )"
-    log_info "Debug: $( [ "$DEBUG_MODE" = true ] && echo "YES" || echo "NO" )"
-    log_info "Zips found: ${#LIST_OF_ZIPS[@]}"
-    
     local expected_total=0
     # Prepare expected file list (basename only) for post-run verification.
     EXPECTED_FILE_LIST="$LOG_DIR/expected_file_list.txt"
@@ -109,13 +104,11 @@ run_pre_process() {
         zip_size=$(stat -c%s "$item" 2>/dev/null || echo 0)
         local zip_mb
         zip_mb=$(size_mb "$zip_size")
-        log_info "  - $item ($zip_count files, ${zip_mb}MB)"
+        log_info "Input: $item — $zip_count files (${zip_mb}MB)"
     done
 
     # Store expected file count for later verification.
     EXPECTED_TOTAL_FILES=$expected_total
-
-    log_info "------------------------------"
     
     mkdir -p "$TMP_DIR"
     mkdir -p "$OUT_DIR"
@@ -131,7 +124,7 @@ run_unzip() {
 }
 
 run_organization() {
-    log_info "Sorting files into $OUT_DIR..."
+    log_info "Organizing..."
 
     for zip_file in "${LIST_OF_ZIPS[@]}"; do
         local folder_name="${zip_file%.*}"
@@ -264,7 +257,7 @@ run_consolidate_small_date_folders() {
         total_count=$(find "$date_dir" -type f 2>/dev/null | wc -l | xargs)
 
         if [ "$total_count" -lt "$threshold" ]; then
-            log_info "Consolidating small date folder '$d_folder' (total files=$total_count) into individual/"
+            log_debug "Consolidating small date folder '$d_folder' (total files=$total_count) into individual/"
 
             mkdir -p "$individual_dir" "$individual_videos" "$individual_unknown"
 
@@ -285,222 +278,118 @@ run_consolidate_small_date_folders() {
 }
 
 run_cleanup() {
-    log_info "Cleaning up empty directories..."
     find "$OUT_DIR" -depth -type d -empty -delete
-
-    # Remove the live-photo mp4 folder once done (it is a temporary staging area).
-    if [ -d "$OUT_DIR/mp4_live_videos" ]; then
-        log_info "Removing mp4_live_videos folder: $OUT_DIR/mp4_live_videos"
-        rm -rf "$OUT_DIR/mp4_live_videos"
-    fi
+    [ -d "$OUT_DIR/mp4_live_videos" ] && rm -rf "$OUT_DIR/mp4_live_videos"
 }
 run_zip_output() {
     local zip_path="$DATA_DIR/organized_album.zip"
 
-    # Count the total number of files we are about to archive.
-    local file_count
-    file_count=$(find "$OUT_DIR" -type f 2>/dev/null | wc -l | xargs)
-    log_info "  [Zip] Will archive $file_count files from $OUT_DIR"
-
-    if [ -f "$zip_path" ]; then
-        log_info "Removing existing archive: $zip_path"
-        rm -f "$zip_path"
-    fi
-
-    log_info "Creating zip archive: $zip_path"
+    [ -f "$zip_path" ] && rm -f "$zip_path"
     (cd "$OUT_DIR" && zip -rq "$zip_path" .)
 
     if [ -f "$zip_path" ]; then
-        local zip_bytes
-        zip_bytes=$(stat -c%s "$zip_path" 2>/dev/null || echo 0)
         local zip_mb
-        zip_mb=$(size_mb "$zip_bytes")
-        log_info "  [Zip] Created $zip_path (Size: ${zip_mb}MB)"
+        zip_mb=$(size_mb "$(stat -c%s "$zip_path" 2>/dev/null || echo 0)")
+        log_info "Output: $zip_path (${zip_mb}MB)"
     else
-        log_info "  [Zip] Failed to create $zip_path"
+        log_info "ERROR: Failed to create $zip_path"
     fi
 }
 run_post_summary() {
-    log_info ""
-    log_info "--- Final Organization Summary ---"
-
     local grand_photos=0
     local grand_videos=0
     local grand_unknown=0
     local grand_size=0
 
-    # Report mp4 live videos (stored at top level)
+    # Tally mp4 live videos (top-level special folder)
     if [ -d "$OUT_DIR/mp4_live_videos" ]; then
-        local live_c
-        local live_bytes
+        local live_c live_bytes
         live_c=$(find "$OUT_DIR/mp4_live_videos" -type f 2>/dev/null | wc -l | xargs)
         live_bytes=$(find "$OUT_DIR/mp4_live_videos" -type f -printf '%s\n' 2>/dev/null | awk '{sum+=$1} END {print sum+0}')
-        local live_mb
-        live_mb=$(size_mb "$live_bytes")
-        log_info "  [mp4_live_videos] Total: $live_c (Size: ${live_mb}MB)"
-
         grand_videos=$((grand_videos + live_c))
         grand_size=$((grand_size + live_bytes))
     fi
 
-    # Report consolidated "individual" bucket (small date folders)
-    if [ -d "$OUT_DIR/individual" ]; then
-        local ind_p
-        local ind_v
-        local ind_u
-        local ind_bytes
-
-        ind_v=$(find "$OUT_DIR/individual/videos" -type f 2>/dev/null | wc -l | xargs)
-        ind_u=$(find "$OUT_DIR/individual/unknown" -type f 2>/dev/null | wc -l | xargs)
-        local ind_total_root
-        ind_total_root=$(find "$OUT_DIR/individual" -maxdepth 1 -type f 2>/dev/null | wc -l | xargs)
-        # Files in the root of individual/ are treated as photos.
-        ind_p=$ind_total_root
-
-        ind_bytes=$(find "$OUT_DIR/individual" -type f -printf '%s\n' 2>/dev/null | awk '{sum+=$1} END {print sum+0}')
-        local ind_mb
-        ind_mb=$(size_mb "$ind_bytes")
-
-        local ind_total=$((ind_p + ind_v + ind_u))
-        log_info "  [individual] Total: $ind_total (Photos: $ind_p, Videos: $ind_v, Unknown: $ind_u) (Size: ${ind_mb}MB)"
-
-        grand_photos=$((grand_photos + ind_p))
-        grand_videos=$((grand_videos + ind_v))
-        grand_unknown=$((grand_unknown + ind_u))
-        grand_size=$((grand_size + ind_bytes))
-    fi
-
-    # Report per-date folders (skip special folders)
+    # Tally all remaining folders (individual + per-date)
     for d_folder in $(ls "$OUT_DIR" | sort); do
-        if [ "$d_folder" = "mp4_live_videos" ] || [ "$d_folder" = "individual" ]; then
-            continue
-        fi
+        [ "$d_folder" = "mp4_live_videos" ] && continue
+        [ ! -d "$OUT_DIR/$d_folder" ] && continue
 
-        if [ -d "$OUT_DIR/$d_folder" ]; then
-            # Photos are stored directly in the date folder (not in a "photos" subfolder).
-            local v_c
-            local u_c
-            local total_c
-            local p_c
+        local p_c v_c u_c folder_bytes
+        p_c=$(find "$OUT_DIR/$d_folder" -maxdepth 1 -type f 2>/dev/null | wc -l | xargs)
+        v_c=$(find "$OUT_DIR/$d_folder/videos" -type f 2>/dev/null | wc -l | xargs)
+        u_c=$(find "$OUT_DIR/$d_folder/unknown" -type f 2>/dev/null | wc -l | xargs)
+        folder_bytes=$(find "$OUT_DIR/$d_folder" -type f -printf '%s\n' 2>/dev/null | awk '{sum+=$1} END {print sum+0}')
 
-            v_c=$(find "$OUT_DIR/$d_folder/videos" -type f 2>/dev/null | wc -l | xargs)
-            u_c=$(find "$OUT_DIR/$d_folder/unknown" -type f 2>/dev/null | wc -l | xargs)
-            # Photos for a date folder are stored at the top level within that folder.
-            p_c=$(find "$OUT_DIR/$d_folder" -maxdepth 1 -type f 2>/dev/null | wc -l | xargs)
-
-            local folder_bytes
-            folder_bytes=$(find "$OUT_DIR/$d_folder" -type f -printf '%s\n' 2>/dev/null | awk '{sum+=$1} END {print sum+0}')
-            local folder_mb
-            folder_mb=$(size_mb "$folder_bytes")
-
-            local s_t=$((p_c + v_c + u_c))
-            log_info "  [$d_folder] Total: $s_t (Photos: $p_c, Videos: $v_c, Unknown: $u_c) (Size: ${folder_mb}MB)"
-
-            grand_photos=$((grand_photos + p_c))
-            grand_videos=$((grand_videos + v_c))
-            grand_unknown=$((grand_unknown + u_c))
-            grand_size=$((grand_size + folder_bytes))
-        fi
+        grand_photos=$((grand_photos + p_c))
+        grand_videos=$((grand_videos + v_c))
+        grand_unknown=$((grand_unknown + u_c))
+        grand_size=$((grand_size + folder_bytes))
     done
 
     local grand_total=$((grand_photos + grand_videos + grand_unknown))
     local grand_mb
     grand_mb=$(size_mb "$grand_size")
 
-    log_info "  [Totals] Photos: $grand_photos, Videos: $grand_videos, Unknown: $grand_unknown"
-    log_info "  [Verification] Expected from ZIP: ${EXPECTED_TOTAL_FILES:-unknown} files"
+    if [ -n "${EXPECTED_TOTAL_FILES:-}" ] && [ "$grand_total" -eq "${EXPECTED_TOTAL_FILES}" ]; then
+        log_info "Result: $grand_total files — Photos: $grand_photos | Videos: $grand_videos | Unknown: $grand_unknown | Size: ${grand_mb}MB  ✅"
+    else
+        local diff=$((grand_total - ${EXPECTED_TOTAL_FILES:-0}))
+        log_info "Result: $grand_total files — Photos: $grand_photos | Videos: $grand_videos | Unknown: $grand_unknown | Size: ${grand_mb}MB  ❌ expected ${EXPECTED_TOTAL_FILES:-?} (diff: $diff)"
 
-    if [ -n "${EXPECTED_TOTAL_FILES:-}" ]; then
-        if [ "$grand_total" -eq "${EXPECTED_TOTAL_FILES}" ]; then
-            log_info "  [Verification] Match ✅"
-        else
-            local diff
-            diff=$((grand_total - EXPECTED_TOTAL_FILES))
-            log_info "  [Verification] Mismatch (difference: $diff files)"
+        # Filename-level cross-check to surface missing/extra files
+        if [ -f "$EXPECTED_FILE_LIST" ]; then
+            local actual_file_list="$LOG_DIR/actual_file_list.txt"
+            : > "$actual_file_list"
+            find "$OUT_DIR" -type f -printf '%f\n' >> "$actual_file_list"
 
-            # Perform a filename-based cross-check to help locate missing files.
-            if [ -f "$EXPECTED_FILE_LIST" ]; then
-                local actual_file_list="$LOG_DIR/actual_file_list.txt"
-                : > "$actual_file_list"
+            local expected_counts="$LOG_DIR/expected_counts.txt"
+            local actual_counts="$LOG_DIR/actual_counts.txt"
+            local missing_list="$LOG_DIR/missing_files.txt"
+            local extra_list="$LOG_DIR/extra_files.txt"
 
-                # List all organized files (including mp4_live_videos if present)
-                find "$OUT_DIR" -type f -printf '%f\n' >> "$actual_file_list"
-                if [ -d "$OUT_DIR/mp4_live_videos" ]; then
-                    find "$OUT_DIR/mp4_live_videos" -type f -printf '%f\n' >> "$actual_file_list"
-                fi
+            awk '{cnt[$0]++} END {for (f in cnt) print f, cnt[f]}' "$EXPECTED_FILE_LIST" | sort > "$expected_counts"
+            awk '{cnt[$0]++} END {for (f in cnt) print f, cnt[f]}' "$actual_file_list"   | sort > "$actual_counts"
+            : > "$missing_list"; : > "$extra_list"
 
-                # Build count tables (basename -> count) for expected vs actual.
-                local expected_counts="$LOG_DIR/expected_counts.txt"
-                awk '{cnt[$0]++} END {for (f in cnt) print f, cnt[f]}' "$EXPECTED_FILE_LIST" | sort > "$expected_counts"
-
-                local actual_counts="$LOG_DIR/actual_counts.txt"
-                awk '{cnt[$0]++} END {for (f in cnt) print f, cnt[f]}' "$actual_file_list" | sort > "$actual_counts"
-
-                local missing_list="$LOG_DIR/missing_files.txt"
-                local extra_list="$LOG_DIR/extra_files.txt"
-
-                # Ensure the output files exist before writing to them.
-                : > "$missing_list"
-                : > "$extra_list"
-
-                python3 - "$expected_counts" "$actual_counts" "$missing_list" "$extra_list" <<'PY'
+            python3 - "$expected_counts" "$actual_counts" "$missing_list" "$extra_list" <<'PY'
 import sys
 from pathlib import Path
 
-expected_counts = Path(sys.argv[1])
-actual_counts = Path(sys.argv[2])
-missing = Path(sys.argv[3])
-extra = Path(sys.argv[4])
-
 exp = {}
-for line in expected_counts.read_text().splitlines():
-    if not line.strip():
-        continue
-    name, count = line.rsplit(None, 1)
-    exp[name] = exp.get(name, 0) + int(count)
+for line in Path(sys.argv[1]).read_text().splitlines():
+    if line.strip():
+        name, count = line.rsplit(None, 1)
+        exp[name] = exp.get(name, 0) + int(count)
 
 act = {}
-for line in actual_counts.read_text().splitlines():
-    if not line.strip():
-        continue
-    name, count = line.rsplit(None, 1)
-    act[name] = act.get(name, 0) + int(count)
+for line in Path(sys.argv[2]).read_text().splitlines():
+    if line.strip():
+        name, count = line.rsplit(None, 1)
+        act[name] = act.get(name, 0) + int(count)
 
-with missing.open('w') as mf, extra.open('w') as ef:
-    all_names = sorted(set(exp) | set(act))
-    for name in all_names:
-        de = exp.get(name, 0)
-        da = act.get(name, 0)
-        if de > da:
-            mf.write(f"{name} {de-da}\n")
-        elif da > de:
-            ef.write(f"{name} {da-de}\n")
+with Path(sys.argv[3]).open('w') as mf, Path(sys.argv[4]).open('w') as ef:
+    for name in sorted(set(exp) | set(act)):
+        de, da = exp.get(name, 0), act.get(name, 0)
+        if de > da: mf.write(f"{name}\n")
+        elif da > de: ef.write(f"{name}\n")
 PY
 
-                local missing_count
-                missing_count=$(wc -l < "$missing_list" | xargs)
-                if [ "$missing_count" -gt 0 ]; then
-                    log_info "  [Verification] Missing files (basename + missing count): $missing_count (showing up to 10):"
-                    head -n 10 "$missing_list" | sed 's/^/    - /'
-                fi
+            local missing_count
+            missing_count=$(wc -l < "$missing_list" | xargs)
+            [ "$missing_count" -gt 0 ] && \
+                log_info "  Missing ($missing_count):" && head -n 10 "$missing_list" | sed 's/^/    - /'
 
-                local extra_count
-                extra_count=$(wc -l < "$extra_list" | xargs)
-                if [ "$extra_count" -gt 0 ]; then
-                    log_info "  [Verification] Extra files organized (basename + extra count): $extra_count (showing up to 10):"
-                    head -n 10 "$extra_list" | sed 's/^/    - /'
-                fi
-            fi
+            local extra_count
+            extra_count=$(wc -l < "$extra_list" | xargs)
+            [ "$extra_count" -gt 0 ] && \
+                log_info "  Extra ($extra_count):" && head -n 10 "$extra_list" | sed 's/^/    - /'
         fi
     fi
-
-    log_info "------------------------------"
-    log_info "GRAND TOTAL: $grand_total files organized (Size: ${grand_mb}MB)."
 }
 
 # --- Main Execution ---
 
-log_info "Initiating Photo Manager..."
 cd "$DATA_DIR" || { echo "CRITICAL: Cannot access $DATA_DIR"; exit 1; }
 
 run_pre_process
@@ -516,9 +405,5 @@ else
     log_info "Unzip mode complete. Organization skipped per -u flag."
 fi
 
-log_info "Process Finished."
-log_info "Log: $LOG_FILE"
-log_info "Tmp: $DATA_DIR/tmp_$EXEC_ID"
-log_info "Output Folder: $DATA_DIR/organize_album_$EXEC_ID"
-log_info "Output Zip: $DATA_DIR/organized_album.zip"
+log_info "Done. Log: $LOG_FILE"
 # End of script
