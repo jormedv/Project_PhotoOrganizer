@@ -7,13 +7,12 @@
 ################################################################################
 
 # --- Load the Project Config ---
-set -a; . ./.env; set +a
+set -a; . ./.env.photoorganizer; set +a
     
 # --- Default Configuration ---
 DEBUG_MODE=false
 EXEC_ID=$(date '+%Y%m%d%H%M%S')
-BASE_DIR="$BASE_DEV_FOLDER/photos"
-LOG_DIR="$BASE_DIR/log_$EXEC_ID"
+LOG_DIR="${LOG_DIR:-$HOME/log/Project_PhotoOrganizer}"
 LOG_FILE="$LOG_DIR/upload_to_drive_$EXEC_ID.log"
 
 # --- Utility Functions ---

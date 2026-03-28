@@ -8,14 +8,14 @@
 
   
     # --- Load the Project Config ---
-    set -a; . ./.env; set +a
-    
+    set -a; . ./.env.photoorganizer; set +a
+
     # --- Default Configuration ---
     DEBUG_MODE=false
     UNZIP_ONLY_MODE=false
     EXEC_ID=$(date '+%Y%m%d%H%M%S')
-    BASE_DIR="$BASE_DEV_FOLDER/photos"
-    LOG_DIR="$BASE_DIR/log_$EXEC_ID"
+    DATA_DIR="${DATA_DIR:-$HOME/data/Project_PhotoOrganizer}"
+    LOG_DIR="${LOG_DIR:-$HOME/log/Project_PhotoOrganizer}/organize_$EXEC_ID"
     LOG_FILE="$LOG_DIR/organize_album_$EXEC_ID.log"
     TMP_DIR="tmp_$EXEC_ID"
     OUT_DIR="organize_album_$EXEC_ID"
@@ -83,7 +83,7 @@ run_pre_process() {
     LIST_OF_ZIPS=("${filtered_zips[@]}")
 
     if [ ${#LIST_OF_ZIPS[@]} -eq 0 ]; then
-        log_info "No ZIP files found in $BASE_DIR. Exiting."
+        log_info "No ZIP files found in $DATA_DIR. Exiting."
         exit 0
     fi
 
@@ -295,7 +295,7 @@ run_cleanup() {
     fi
 }
 run_zip_output() {
-    local zip_path="$BASE_DIR/organized_album.zip"
+    local zip_path="$DATA_DIR/organized_album.zip"
 
     # Count the total number of files we are about to archive.
     local file_count
@@ -501,7 +501,7 @@ PY
 # --- Main Execution ---
 
 log_info "Initiating Photo Manager..."
-cd "$BASE_DIR" || { echo "CRITICAL: Cannot access $BASE_DIR"; exit 1; }
+cd "$DATA_DIR" || { echo "CRITICAL: Cannot access $DATA_DIR"; exit 1; }
 
 run_pre_process
 run_unzip
@@ -518,7 +518,7 @@ fi
 
 log_info "Process Finished."
 log_info "Log: $LOG_FILE"
-log_info "Tmp: $BASE_DIR/tmp_$EXEC_ID"
-log_info "Output Folder: $BASE_DIR/organize_album_$EXEC_ID"
-log_info "Output Zip: $BASE_DIR/organized_album.zip"
+log_info "Tmp: $DATA_DIR/tmp_$EXEC_ID"
+log_info "Output Folder: $DATA_DIR/organize_album_$EXEC_ID"
+log_info "Output Zip: $DATA_DIR/organized_album.zip"
 # End of script

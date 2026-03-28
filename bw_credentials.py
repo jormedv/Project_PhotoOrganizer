@@ -1,98 +1,90 @@
 """
 bw_credentials.py
 -----------------
-Retrieve secrets from Bitwarden at runtime.
-No secrets are stored in environment variables or on disk.
+Retrieve secrets from Bitwarden at runtime via Google Secret Manager.
+
+Flow:
+  1. Fetch the Bitwarden master password from Google Secret Manager (GSM).
+  2. Unlock the local Bitwarden vault  →  session token (in-memory only).
+  3. Fetch all vault items once and cache them for the process lifetime.
+
+Authentication to GSM uses Application Default Credentials (ADC):
+  Local:   gcloud auth application-default login
+  GCP VM:  automatic via Workload Identity (no setup needed)
+
+Configuration (env vars, or defaults below):
+  GCP_PROJECT   Google Cloud project ID  (default: jmv-linux-gcloud)
+  GSM_SECRET    Secret name in GSM       (default: JMV-BW)
 
 Usage:
-    from bw_credentials import get_credential, load_env
+    from bw_credentials import get_credential
 
-    # fetch one secret by name
-    api_key = get_credential("OPENAI_API_KEY")
-
-    # fetch all secrets declared in a .env manifest
-    creds = load_env(".env")
-    db_pass = creds["DB_PASSWORD"]
+    password = get_credential("GOOGLE_PHOTOS_ALBUM_URL")
 """
 
-import subprocess
-import os
-import sys
 import json
+import os
+import subprocess
+
+from google.cloud import secretmanager
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-GPG_FILE     = os.path.expanduser("~/DEV/.secrets/master.gpg")
-SECRETS_REPO = os.path.expanduser("~/DEV/.secrets")
+GCP_PROJECT = os.environ.get("GCP_PROJECT", "jmv-linux-gcloud")
+GSM_SECRET  = os.environ.get("GSM_SECRET",  "JMV-BW")
 
 # ---------------------------------------------------------------------------
 # Internal state — cached for the lifetime of the process, never written to disk
 # ---------------------------------------------------------------------------
 
-_session: str | None = None
-_vault_cache: dict | None = None  # all vault items indexed by exact name
+_session:     str  | None = None
+_vault_cache: dict | None = None   # all vault items indexed by exact name
 
 
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
 
-def _sync_secrets_repo() -> None:
-    """Pull latest from GitHub (uses SSH key — no prompt)."""
-    result = subprocess.run(
-        ["git", "-C", SECRETS_REPO, "pull"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
+def _fetch_master_password() -> str:
+    """Fetch the Bitwarden master password from Google Secret Manager."""
+    try:
+        client   = secretmanager.SecretManagerServiceClient()
+        name     = f"projects/{GCP_PROJECT}/secrets/{GSM_SECRET}/versions/latest"
+        response = client.access_secret_version(request={"name": name})
+        return response.payload.data.decode("utf-8").strip()
+    except Exception as e:
         raise RuntimeError(
-            f"Failed to sync secrets repo:\n{result.stderr.strip()}"
-        )
-
-
-def _decrypt_master_password() -> str:
-    """Decrypt master.gpg with GPG private key — no passphrase prompt."""
-    result = subprocess.run(
-        ["gpg", "--decrypt", "--quiet", GPG_FILE],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"GPG decryption failed:\n{result.stderr.strip()}"
-        )
-    password = result.stdout.strip()
-    if not password:
-        raise RuntimeError(
-            f"GPG decrypted successfully but output was empty. "
-            f"Check that {GPG_FILE} was encrypted with the correct content."
-        )
-    return password
+            f"Failed to fetch secret '{GSM_SECRET}' from GSM project '{GCP_PROJECT}':\n{e}\n\n"
+            f"Local fix:  gcloud auth application-default login\n"
+            f"GCP VM:     verify Workload Identity and IAM role "
+            f"roles/secretmanager.secretAccessor"
+        ) from e
 
 
 def _unlock_bitwarden(password: str) -> str:
     """Unlock the Bitwarden vault and return a session token."""
     result = subprocess.run(
-        ["bw", "unlock", "--raw", password],
+        ["bw", "unlock", "--raw", "--passwordenv", "BW_MASTER_PASSWORD"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        env={**os.environ, "BW_MASTER_PASSWORD": password},
     )
     session = result.stdout.strip()
     if not session:
         raise RuntimeError(
-            "bw unlock returned no session token. "
-            "Make sure you are logged in: run 'bw login' once manually."
+            f"bw unlock returned no session token (exit code {result.returncode}).\n"
+            f"stdout: {result.stdout!r}\n"
+            f"stderr: {result.stderr.strip()}\n"
+            "Make sure you are logged in: run 'bw login' then 'bw sync'."
         )
     return session
 
 
 def _load_vault_cache() -> None:
-    """
-    Fetch all vault items once and index them by exact name in memory.
-    This means only one bw CLI call regardless of how many credentials you fetch.
-    """
+    """Fetch all vault items once and index them by exact name in memory."""
     global _vault_cache
 
     result = subprocess.run(
@@ -111,23 +103,21 @@ def _load_vault_cache() -> None:
     except json.JSONDecodeError:
         raise RuntimeError("Failed to parse Bitwarden vault response as JSON.")
 
-    # index by exact item name for O(1) lookup
     _vault_cache = {item["name"]: item for item in items}
 
 
 def _get_session() -> str:
     """
     Return a valid Bitwarden session token.
-    On first call: syncs repo, decrypts password, unlocks vault, loads all items.
+    On first call: fetches password from GSM, unlocks vault, loads all items.
     On subsequent calls: returns cached session instantly.
     """
     global _session
     if _session:
         return _session
 
-    _sync_secrets_repo()
-    password = _decrypt_master_password()
-    _session = _unlock_bitwarden(password)
+    password  = _fetch_master_password()
+    _session  = _unlock_bitwarden(password)
     _load_vault_cache()
     return _session
 
@@ -144,25 +134,16 @@ def get_credential(key: str, field: str = "password") -> str:
     ----------
     key : str
         The exact name of the item in Bitwarden (case-sensitive).
-        e.g. "OPENAI_API_KEY"
     field : str
-        The field to retrieve: "password" (default) or "username"
-
-    Returns
-    -------
-    str
-        The value of the requested field.
+        The field to retrieve: "password" (default) or "username".
 
     Raises
     ------
-    KeyError
-        If no item with that exact name exists, or the field is empty.
-    ValueError
-        If an unsupported field is requested.
-    RuntimeError
-        If Bitwarden cannot be unlocked or vault cannot be loaded.
+    KeyError      If the item or field does not exist in the vault.
+    ValueError    If an unsupported field is requested.
+    RuntimeError  If GSM or Bitwarden cannot be reached.
     """
-    _get_session()  # ensures _vault_cache is populated
+    _get_session()
 
     item = _vault_cache.get(key)
     if not item:
@@ -188,70 +169,8 @@ def get_credential(key: str, field: str = "password") -> str:
     return value
 
 
-def load_env(dotenv_path: str = ".env") -> dict:
-    """
-    Read key names from a .env manifest file and fetch each from Bitwarden.
-
-    The .env file should contain key names only (values are ignored):
-        DB_PASSWORD
-        API_KEY=anything_here_is_ignored
-        # lines starting with # are comments
-
-    Parameters
-    ----------
-    dotenv_path : str
-        Path to the .env file. Defaults to ".env" in the current directory.
-
-    Returns
-    -------
-    dict
-        Mapping of key name -> secret value.
-        Keys not found in Bitwarden are excluded; a warning is printed.
-
-    Raises
-    ------
-    FileNotFoundError
-        If the .env file does not exist.
-    RuntimeError
-        If Bitwarden cannot be unlocked.
-    """
-    if not os.path.exists(dotenv_path):
-        raise FileNotFoundError(
-            f".env file not found at '{dotenv_path}'"
-        )
-
-    credentials: dict = {}
-    missing: list = []
-
-    with open(dotenv_path) as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            # support both "KEY" and "KEY=placeholder" formats
-            key = line.split("=")[0].strip()
-            if not key:
-                continue
-            try:
-                credentials[key] = get_credential(key)
-            except KeyError:
-                missing.append(key)
-
-    if missing:
-        for key in missing:
-            print(
-                f"[bw_credentials] WARNING: '{key}' not found in Bitwarden",
-                file=sys.stderr
-            )
-
-    return credentials
-
-
 def reset_session() -> None:
-    """
-    Clear the cached session token and vault cache.
-    Call this if the session has expired and you need to re-authenticate.
-    """
+    """Clear the cached session and vault. Call if the session has expired."""
     global _session, _vault_cache
-    _session = None
+    _session     = None
     _vault_cache = None

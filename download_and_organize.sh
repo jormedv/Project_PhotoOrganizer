@@ -7,15 +7,16 @@
 ################################################################################
 
   # --- Load the Project Config ---
-  set -a; . ./.env; set +a
+  set -a; . ./.env.photoorganizer; set +a
     
 
 # --- Default Configuration ---
 DEBUG_MODE=false
 SKIP_DOWNLOAD=false
 EXEC_ID=$(date '+%Y%m%d%H%M%S')
-BASE_DIR="$BASE_DEV_FOLDER/photos"
-CODE_DIR="$BASE_DEV_FOLDER/Project_PhotoOrganizer"
+DATA_DIR="${DATA_DIR:-$HOME/data/Project_PhotoOrganizer}"
+LOG_DIR="${LOG_DIR:-$HOME/log/Project_PhotoOrganizer}"
+CODE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="download_and_organize_$EXEC_ID.log"
 
 # --- Utility Functions ---
@@ -78,8 +79,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 # --- Global Logging ---
-# Captures everything to screen and log file
-exec > >(tee -a "$BASE_DIR/$LOG_FILE") 2>&1
+mkdir -p "$DATA_DIR" "$LOG_DIR"
+exec > >(tee -a "$LOG_DIR/$LOG_FILE") 2>&1
 
 # --- Main Execution ---
 log_info "Starting download + organize workflow..."
@@ -90,9 +91,9 @@ if [ "$SKIP_DOWNLOAD" = true ]; then
 else
     log_info "Running downloader: download_album_all_1.py"
 
-    if [ -f "$BASE_DIR/album.zip" ]; then
-        echo "$BASE_DIR/album.zip exists. Deleting now..."
-        rm -f "$BASE_DIR/album.zip"
+    if [ -f "$DATA_DIR/album.zip" ]; then
+        echo "$DATA_DIR/album.zip exists. Deleting now..."
+        rm -f "$DATA_DIR/album.zip"
     fi
 
     source .venv/bin/activate
@@ -115,7 +116,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # Verify the expected output archive exists before attempting upload.
-ZIP_PATH="$BASE_DIR/organized_album.zip"
+ZIP_PATH="$DATA_DIR/organized_album.zip"
 if [ ! -f "$ZIP_PATH" ]; then
     log_info "Expected output archive not found: $ZIP_PATH"
     log_info "Aborting upload step."

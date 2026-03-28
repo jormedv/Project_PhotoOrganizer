@@ -1,5 +1,5 @@
 #Basic
-sudo apt install zip unzip wget curl -y
+sudo apt install zip unzip wget curl jq -y
 sudo apt install libimage-exiftool-perl -y
 
 #Google Workspace and Google Cloud CLIs
