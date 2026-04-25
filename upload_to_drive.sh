@@ -12,7 +12,7 @@ set -a; . ./.env.photoorganizer; set +a
 # --- Default Configuration ---
 DEBUG_MODE=false
 EXEC_ID=$(date '+%Y%m%d%H%M%S')
-LOG_DIR="${LOG_DIR:-$HOME/log/Project_PhotoOrganizer}"
+LOG_DIR="${LOG_DIR:-$HOME/logs/Project_PhotoOrganizer}"
 LOG_FILE="$LOG_DIR/upload_to_drive_$EXEC_ID.log"
 REMOTE_FOLDER="SHARED_WITH_JORGE"
 

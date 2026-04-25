@@ -72,7 +72,7 @@ All scripts source `.env.photoorganizer` at startup. Key variables:
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `DATA_DIR` | `~/data/Project_PhotoOrganizer` | Photos, zips, temp dirs |
-| `LOG_DIR` | `~/log/Project_PhotoOrganizer` | Log files |
+| `LOG_DIR` | `~/logs/Project_PhotoOrganizer` | Log files |
 | `GOOGLE_PHOTOS_ALBUM_URL` | *(required)* | Shared album to download |
 | `CHROME_USER_DATA_DIR` | `~/.config/google-chrome-playwright` | Playwright Chrome profile |
 | `GCP_PROJECT` | `jmv-linux-gcloud` | GCP project for GSM |

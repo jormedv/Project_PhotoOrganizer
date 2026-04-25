@@ -15,7 +15,7 @@
     UNZIP_ONLY_MODE=false
     EXEC_ID=$(date '+%Y%m%d%H%M%S')
     DATA_DIR="${DATA_DIR:-$HOME/data/Project_PhotoOrganizer}"
-    LOG_DIR="${LOG_DIR:-$HOME/log/Project_PhotoOrganizer}/organize_$EXEC_ID"
+    LOG_DIR="${LOG_DIR:-$HOME/logs/Project_PhotoOrganizer}/organize_$EXEC_ID"
     LOG_FILE="$LOG_DIR/organize_album_$EXEC_ID.log"
     TMP_DIR="tmp_$EXEC_ID"
     OUT_DIR="organize_album_$EXEC_ID"

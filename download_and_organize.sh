@@ -15,7 +15,7 @@ DEBUG_MODE=false
 SKIP_DOWNLOAD=false
 EXEC_ID=$(date '+%Y%m%d%H%M%S')
 DATA_DIR="${DATA_DIR:-$HOME/data/Project_PhotoOrganizer}"
-LOG_DIR="${LOG_DIR:-$HOME/log/Project_PhotoOrganizer}"
+LOG_DIR="${LOG_DIR:-$HOME/logs/Project_PhotoOrganizer}"
 CODE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="download_and_organize_$EXEC_ID.log"
 
